@@ -57,11 +57,7 @@ jobs:
         with:
           context: .
           build-args: |
-            NODEJS_VERSION=${{ github.event.inputs.nodejs }}
-            RELEASE_VERSION=${{ github.event.inputs.release }}
-            MEND_EMAIL=${{ secrets.MEND_EMAIL }}
-            MEND_URL=${{ secrets.MEND_URL }}
-            MEND_USER_KEY=${{ secrets.MEND_USER_KEY }}
+            RELEASE=${{ github.event.inputs.nodejs }}-r${{ github.event.inputs.release }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
