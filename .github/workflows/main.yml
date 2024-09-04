@@ -62,6 +62,19 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Scan Docker Image
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}:${{ github.event.inputs.nodejs }}-r${{ github.event.inputs.release }}-tumbleweed
+          NODEJS_VERSION: ${{ github.event.inputs.nodejs }}
+          RELEASE_VERSION: ${{ github.event.inputs.release }}
+          MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
+          MEND_URL: ${{ secrets.MEND_URL }}
+          MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
+        run: |
+          curl -L https://downloads.mend.io/cli/linux_amd64/mend -o /tmp/mend && chmod +x /tmp/mend && \
+          /tmp/mend image $IMAGE -s "OpenScape UC Test//OSEM third party applications//nodejs-osem-docker-image - $NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed"
+        working-directory: /tmp
+
       - name: Create a Release
         uses: actions/create-release@v1
         env:
@@ -76,16 +89,3 @@ jobs:
             docker run -dit ghcr.io/${{ github.repository }}:${{ github.event.inputs.nodejs }}-r${{ github.event.inputs.release }}-tumbleweed
           draft: false
           prerelease: false
-
-      - name: Scan Docker Image
-        env:
-          IMAGE: ghcr.io/${{ github.repository }}:${{ github.event.inputs.nodejs }}-r${{ github.event.inputs.release }}-tumbleweed
-          NODEJS_VERSION: ${{ github.event.inputs.nodejs }}
-          RELEASE_VERSION: ${{ github.event.inputs.release }}
-          MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
-          MEND_URL: ${{ secrets.MEND_URL }}
-          MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
-        run: |
-          curl -L https://downloads.mend.io/cli/linux_amd64/mend -o /tmp/mend && chmod +x /tmp/mend && \
-          /tmp/mend image $IMAGE -s "OpenScape UC Test//OSEM third party applications//nodejs-osem-docker-image - $NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed"
-        working-directory: /tmp
