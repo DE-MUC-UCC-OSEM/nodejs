@@ -1,6 +1,6 @@
 FROM opensuse/tumbleweed:latest AS base
 
-COPY /tmp/nodejs*tar.xz /tmp
+COPY nodejs*tar.xz /tmp
 
 ARG RELEASE
 RUN tar --directory /usr -xvf /tmp/nodejs-$RELEASE-$(uname -p).tar.xz && \
