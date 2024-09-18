@@ -75,17 +75,13 @@ jobs:
           /tmp/mend image ${IMAGE,,} -s "OpenScape UC Test//OSEM third party applications//nodejs-osem-docker-image - $NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed"
         working-directory: /tmp
 
-      - name: Create a Release
-        uses: actions/create-release@v1
+      - name: Create a release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.event.inputs.nodejs }}-r${{ github.event.inputs.release }}
-          release_name: Nodejs ${{ github.event.inputs.nodejs }}-r${{ github.event.inputs.release }}-tumbleweed
-          body: |
-            Nodejs build details
-            - Nodejs: ${{ github.event.inputs.nodejs }}
-
-            docker run -dit ghcr.io/${{ github.repository }}:${{ github.event.inputs.nodejs }}-r${{ github.event.inputs.release }}-tumbleweed
-          draft: false
-          prerelease: false
+          NODEJS_VERSION: ${{ github.event.inputs.nodejs }}
+          RELEASE_VERSION: ${{ github.event.inputs.release }}
+        run: |
+          gh release create "$NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed" \
+              --repo="$GITHUB_REPOSITORY" \
+              --title="$NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed" \
+              --generate-notes
