@@ -7,6 +7,6 @@ Using a pre-built Nodejs executable version. Everything put into a minimal Conta
 
 You can run the image via Docker
 ```
-docker run -dit ghcr.io/svenbeisiegel/nodejs:20.17.0-r1-tumbleweed
+docker run -dit ghcr.io/de-muc-ucc-osem/nodejs:20.17.0-r1-tumbleweed
 ```
 ## Configuration
