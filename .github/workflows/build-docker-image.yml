@@ -72,7 +72,7 @@ jobs:
           MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
         run: |
           curl -L https://downloads.mend.io/cli/linux_amd64/mend -o /tmp/mend && chmod +x /tmp/mend && \
-          /tmp/mend image $IMAGE -s "OpenScape UC Test//OSEM third party applications//nodejs-osem-docker-image - $NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed"
+          /tmp/mend image ${IMAGE,,} -s "OpenScape UC Test//OSEM third party applications//nodejs-osem-docker-image - $NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed"
         working-directory: /tmp
 
       - name: Create a Release
