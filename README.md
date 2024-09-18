@@ -1,3 +1,5 @@
+[![Build Docker Image](https://github.com/DE-MUC-UCC-OSEM/nodejs/actions/workflows/build-docker-image.yml/badge.svg)](https://github.com/DE-MUC-UCC-OSEM/nodejs/actions/workflows/build-docker-image.yml)
+
 ## Information
 Nodejs running in a minimal OpenSUSE Docker Image
 
