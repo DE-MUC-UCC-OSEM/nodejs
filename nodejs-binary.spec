@@ -16,4 +16,4 @@ Requires:      /bin/sh
 Installing NodeJS binary version __VERSION__-__RELEASE__
 
 %files
-%attr(0755, root, root) "/bin/node"
+%attr(0755, root, root) "/usr/bin/node"

@@ -1,0 +1,153 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: 'Nodejs version'
+        default: '24.12.0'
+      release:
+        type: string
+        required: true
+        description: 'Internal release version'
+        default: '0'
+      openssl_fips_version:
+        type: string
+        required: true
+        description: 'OpenSSL version for FIPS module'
+        default: '3.1.2'
+      openssl_version:
+        type: string
+        required: true
+        description: 'OpenSSL version'
+        default: '3.5.4'
+
+jobs:
+  build:
+    name: Push image to Github container registry
+    runs-on: self-hosted
+    timeout-minutes: 240 # 4 hours
+    permissions:
+      contents: write
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ github.event.inputs.version }}-r${{ github.event.inputs.release }}-tumbleweed
+            #type=raw,value=latest
+
+      - name: Set up Docker Buildx (container driver)
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+
+      - name: Build Docker image (push to registry)
+        if: ${{ success() }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_SOURCE_VERSION=${{ github.event.inputs.version }}
+            OPENSSL_FIPS_VERSION=${{ github.event.inputs.openssl_fips_version }}
+            OPENSSL_VERSION=${{ github.event.inputs.openssl_version }}
+          push: true
+          target: image
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Build Docker image (local artifacts)
+        if: ${{ success() }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          outputs: type=local,dest=./artifacts
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          target: artifacts
+          build-args: |
+            NODE_SOURCE_VERSION=${{ github.event.inputs.version }}
+            OPENSSL_FIPS_VERSION=${{ github.event.inputs.openssl_fips_version }}
+            OPENSSL_VERSION=${{ github.event.inputs.openssl_version }}
+
+      - name: Build RPM file
+        if: ${{ success() }}
+        env:
+          NODEJS_VERSION: ${{ github.event.inputs.version }}
+          NODEJS_RELEASE: ${{ github.event.inputs.release }}
+        run: |
+          mkdir -p ${{ github.workspace }}/files/usr/bin
+          cp -a ${{ github.workspace }}/artifacts/usr/bin/node ${{ github.workspace }}/files/usr/bin/node
+          sed -i -e "s/__VERSION__/$NODEJS_VERSION/" ${{ github.workspace }}/nodejs-binary.spec
+          sed -i -e "s/__RELEASE__/$NODEJS_RELEASE/" ${{ github.workspace }}/nodejs-binary.spec
+          rpmbuild -bb --root "${{ github.workspace }}" --build-in-place --buildroot /files --define "_rpmdir ${{ github.workspace }}" ${{ github.workspace }}/nodejs-binary.spec
+          GPG_TTY="" rpmsign --key-id=${{ secrets.GPG_KEY_ID }} --addsign ${{ github.workspace }}/x86_64/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm
+
+      - name: Mend Scans
+        if: ${{ success() }}
+        env:
+          MEND_EMAIL: ${{ vars.MEND_EMAIL }}
+          MEND_ORGANIZATION: ${{ vars.MEND_ORGANIZATION }}
+          MEND_URL: ${{ vars.MEND_URL }}
+          MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
+          IMAGE: ghcr.io/${{ github.repository }}:${{ github.event.inputs.version }}-r${{ github.event.inputs.release }}-tumbleweed
+        run : |
+          rm -f ${{ github.workspace }}/mend
+          curl https://downloads.mend.io/cli/linux_amd64/mend -o ${{ github.workspace }}/mend && chmod +x ${{ github.workspace }}/mend
+          ${{ github.workspace }}/mend image $IMAGE -s "OpenScape UC Test//MSCA//${IMAGE}"
+
+      - name: Create a release
+        if: ${{ success() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get SHA256 checksum
+          SHA256_CHECKSUM=$(sha256sum ${{ github.workspace }}/x86_64/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm | awk '{print $1}')
+          echo "SHA256 Checksum: $SHA256_CHECKSUM"
+          SHA1_CHECKSUM=$(sha1sum ${{ github.workspace }}/x86_64/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm | awk '{print $1}')
+          echo "SHA1 Checksum: $SHA1_CHECKSUM"
+          MD5_CHECKSUM=$(md5sum ${{ github.workspace }}/x86_64/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm | awk '{print $1}')
+          echo "MD5 Checksum: $MD5_CHECKSUM"
+          # Upload RPM file
+          curl --fail --verbose \
+            -H "Authorization: Bearer ${{ secrets.ARTIFACTORY_TOKEN }}" \
+            -H "X-Checksum-Sha256: $SHA256_CHECKSUM" \
+            -H "X-Checksum-Sha1: $SHA1_CHECKSUM" \
+            -H "X-Checksum-Md5: $MD5_CHECKSUM" \
+            -T ${{ github.workspace }}/x86_64/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm \
+            "${{ vars.ARTIFACTORY_RPM_URL }}/nodejs-binary/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm"
+          cat > ${{ github.workspace }}/release-notes.md <<"EOF"
+          ## Nodejs release ${{ github.event.inputs.version }}-${{ github.event.inputs.release }}
+          Download from Mitel Artifactory: [Nodejs](${{ vars.ARTIFACTORY_RPM_URL }}/nodejs-binary/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm)
+
+          EOF
+          gh release create "${{ github.event.inputs.version }}-${{ github.event.inputs.release }}" \
+            "${{ github.workspace }}/x86_64/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm" \
+            --repo="$GITHUB_REPOSITORY" \
+            --title="${{ github.event.inputs.version }}-${{ github.event.inputs.release }}" \
+            --notes-file release-notes.md
+
+      - name: Cleanup environment
+        if: ${{ always() }}
+        run: |
+          echo "Cleaning up environment..."
+          git clean -ffdx
