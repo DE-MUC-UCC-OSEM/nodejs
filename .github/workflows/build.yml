@@ -105,15 +105,16 @@ jobs:
       - name: Mend Scans
         if: ${{ success() }}
         env:
-          MEND_EMAIL: ${{ vars.MEND_EMAIL }}
-          MEND_ORGANIZATION: ${{ vars.MEND_ORGANIZATION }}
-          MEND_URL: ${{ vars.MEND_URL }}
+          MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
+          MEND_URL: ${{ secrets.MEND_URL }}
           MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
           IMAGE: ghcr.io/${{ github.repository }}:${{ github.event.inputs.version }}-r${{ github.event.inputs.release }}-tumbleweed
+          NODEJS_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_VERSION: ${{ github.event.inputs.release }}
         run : |
           rm -f ${{ github.workspace }}/mend
           curl https://downloads.mend.io/cli/linux_amd64/mend -o ${{ github.workspace }}/mend && chmod +x ${{ github.workspace }}/mend
-          ${{ github.workspace }}/mend image $IMAGE -s "OpenScape UC Test//MSCA//${IMAGE}"
+          ${{ github.workspace }}/mend image ${IMAGE} -s "OpenScape UC Test//OSEM third party applications//nodejs-osem-docker-image - $NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed"
 
       - name: Create a release
         if: ${{ success() }}
