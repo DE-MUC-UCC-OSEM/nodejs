@@ -55,8 +55,6 @@ jobs:
 
       - name: Set up Docker Buildx (container driver)
         uses: docker/setup-buildx-action@v3
-        with:
-          install: true
 
       - name: Build Docker image (push to registry)
         if: ${{ success() }}
