@@ -7,7 +7,7 @@ on:
         type: string
         required: true
         description: 'Nodejs version'
-        default: '24.12.0'
+        default: '24.14.1'
       release:
         type: string
         required: true
@@ -22,13 +22,13 @@ on:
         type: string
         required: true
         description: 'OpenSSL version'
-        default: '3.5.4'
+        default: '3.5.5'
 
 jobs:
   build:
     name: Push image to Github container registry
     runs-on: self-hosted
-    timeout-minutes: 240 # 4 hours
+    timeout-minutes: 180 # 3 hours
     permissions:
       contents: write
       packages: write
@@ -38,7 +38,14 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Artifactory Container Registry
         uses: docker/login-action@v3
         with:
           registry: artifactory.mitel.com
@@ -49,7 +56,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ vars.ARTIFACTORY_IMG_URL }}/nodejs
+          images: |
+            ${{ vars.ARTIFACTORY_IMG_URL_PUBLIC }}/nodejs
+            ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=${{ github.event.inputs.version }}-r${{ github.event.inputs.release }}-tumbleweed
 
@@ -105,7 +114,7 @@ jobs:
           MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
           MEND_URL: ${{ secrets.MEND_URL }}
           MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
-          IMAGE: ${{ vars.ARTIFACTORY_IMG_URL }}/nodejs:${{ github.event.inputs.version }}-r${{ github.event.inputs.release }}-tumbleweed
+          IMAGE: ${{ vars.ARTIFACTORY_IMG_URL_PUBLIC }}/nodejs:${{ github.event.inputs.version }}-r${{ github.event.inputs.release }}-tumbleweed
           NODEJS_VERSION: ${{ github.event.inputs.version }}
           RELEASE_VERSION: ${{ github.event.inputs.release }}
         run : |
