@@ -7,7 +7,7 @@ on:
         type: string
         required: true
         description: 'Nodejs version'
-        default: '24.14.1'
+        default: '24.15.0'
       release:
         type: string
         required: true
@@ -22,7 +22,7 @@ on:
         type: string
         required: true
         description: 'OpenSSL version'
-        default: '3.5.5'
+        default: '3.5.6'
 
 jobs:
   build:
