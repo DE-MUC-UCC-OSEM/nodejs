@@ -7,7 +7,7 @@ on:
         type: string
         required: true
         description: 'Nodejs version'
-        default: '24.15.0'
+        default: '24.16.0'
       release:
         type: string
         required: true
@@ -29,6 +29,8 @@ jobs:
     name: Push image to Github container registry
     runs-on: self-hosted
     timeout-minutes: 180 # 3 hours
+    env:
+      BUILDKIT_PROGRESS: plain
     permissions:
       contents: write
       packages: write

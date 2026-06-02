@@ -8,7 +8,7 @@ WORKDIR /opt
 
 ARG NODE_SOURCE_VERSION
 RUN zypper update --no-confirm && \
-    zypper install --no-confirm gawk git python313 python313-pkgconfig gcc gcc15 gcc-c++ gcc15-c++ perl make nasm perl-Text-Template unzip autoconf libtool findutils && \
+    zypper install --no-confirm gawk git python314 python314-pkgconfig gcc gcc16 gcc-c++ gcc16-c++ perl make nasm perl-Text-Template unzip autoconf libtool findutils && \
     git -C /opt clone --depth 1 --branch v$NODE_SOURCE_VERSION https://github.com/nodejs/node.git nodejs
 
 # Build and Install OpenSSL FIPS module
@@ -36,7 +36,7 @@ ENV OPENSSL_CONF=${PREFIX}/ssl/openssl.cnf
 ENV OPENSSL_MODULES=${PREFIX}/lib64/ossl-modules
 ENV LD_LIBRARY_PATH=${PREFIX}/lib64
 WORKDIR /opt/nodejs
-RUN ./configure --shared-openssl-libpath=${PREFIX}/lib64 --shared-openssl-includes=${PREFIX}/include --shared-openssl-libname=crypto,ssl --openssl-is-fips --disable-single-executable-application --without-sqlite --without-corepack --without-node-snapshot && \
+RUN ./configure --shared-openssl-libpath=${PREFIX}/lib64 --shared-openssl-includes=${PREFIX}/include --shared-openssl-libname=crypto,ssl --openssl-is-fips --disable-single-executable-application --without-corepack --without-node-snapshot && \
     make -j$(nproc) && \
     make install
 
