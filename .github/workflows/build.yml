@@ -7,7 +7,7 @@ on:
         type: string
         required: true
         description: 'Nodejs version'
-        default: '24.21.0'
+        default: '26.10.0'
       release:
         type: string
         required: true
