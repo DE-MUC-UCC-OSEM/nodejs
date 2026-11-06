@@ -58,17 +58,47 @@ COPY --from=app /usr/local/lib/ /usr/local/lib/
 COPY --from=app /usr/local/lib64/ /usr/local/lib64/
 COPY --from=app /usr/local/ssl/ /usr/local/ssl/
 COPY openssl.cnf /usr/local/ssl/openssl.cnf
-COPY --chown=root:root --chmod=744 entrypoint.sh /entrypoint.sh
 
+# Runtime flavor: strip npm before the file system gets squashed into the image
+FROM base AS base-tumbleweed
+
+RUN rm -Rf /usr/local/lib/node_modules /usr/local/bin/{npm,npx,corepack}
+
+# Runtime image (<version>-r<release>-tumbleweed): node without npm
 FROM scratch AS image
 
-COPY --from=base / /
+COPY --from=base-tumbleweed / /
 
 ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
 ENV OPENSSL_MODULES=/usr/local/lib64/ossl-modules
 ENV LD_LIBRARY_PATH=/usr/local/lib64
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/bin/bash"]
+
+# Build image (<version>-r<release>-builder): full tumbleweed with bash, git and
+# npm. The stripped base stage has no package manager left, so this starts from
+# a fresh tumbleweed image.
+FROM opensuse/tumbleweed:latest AS builder
+
+SHELL ["/bin/bash", "-c"]
+
+RUN zypper update --no-confirm && \
+    zypper install --no-confirm --no-recommends git-core && \
+    zypper clean --all
+
+COPY --from=app /usr/local/bin/ /usr/local/bin/
+COPY --from=app /usr/local/lib/ /usr/local/lib/
+COPY --from=app /usr/local/lib64/ /usr/local/lib64/
+COPY --from=app /usr/local/ssl/ /usr/local/ssl/
+COPY openssl.cnf /usr/local/ssl/openssl.cnf
+
+ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
+ENV OPENSSL_MODULES=/usr/local/lib64/ossl-modules
+ENV LD_LIBRARY_PATH=/usr/local/lib64
+
+# Smoke test, fails the build on missing libraries or a broken npm
+RUN node --version && npm --version && git --version
+
 CMD ["/bin/bash"]
 
 FROM scratch AS artifacts
