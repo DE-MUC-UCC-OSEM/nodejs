@@ -40,36 +40,62 @@ RUN ./configure --shared-openssl-libpath=${PREFIX}/lib64 --shared-openssl-includ
     make -j$(nproc) && \
     make install
 
-FROM opensuse/tumbleweed:latest AS base
+# Assemble the complete file system of the final image in /rootfs. Everything
+# that is not copied here (shell, coreutils, openssl CLI, ...) does not exist
+# in the final image.
+FROM app AS rootfs
 
-RUN rpm -e --allmatches $(rpm -qa --qf "%{NAME}\n" | grep -v -E "bash|coreutils|filesystem|glibc$|libacl1|libattr1|libcap2|libgcc_s1|libgmp|libncurses|libpcre|libreadline|libselinux|libstdc\+\+|openSUSE-release|system-user-root|terminfo-base") && \
-    rm -Rf /etc/zypp && \
-    rm -Rf /usr/lib/zypp* && \
-    rm -Rf /var/{cache,log,run}/* && \
-    rm -Rf /var/lib/zypp && \
-    rm -Rf /usr/lib/rpm && \
-    rm -Rf /usr/lib/sysimage/rpm && \
-    rm -Rf /usr/share/man && \
-    rm -Rf /usr/local && \
-    rm -Rf /srv/www
+RUN mkdir -p /rootfs/usr/lib64 \
+             /rootfs/usr/local/bin \
+             /rootfs/usr/local/lib/node_modules \
+             /rootfs/usr/local/lib64/ossl-modules \
+             /rootfs/usr/local/ssl \
+             /rootfs/etc \
+             /rootfs/root \
+             /rootfs/tmp && \
+    chmod 700 /rootfs/root && \
+    chmod 1777 /rootfs/tmp && \
+    ln -s usr/lib64 /rootfs/lib64
 
-COPY --from=app /usr/local/bin/ /usr/local/bin/
-COPY --from=app /usr/local/lib/ /usr/local/lib/
-COPY --from=app /usr/local/lib64/ /usr/local/lib64/
-COPY --from=app /usr/local/ssl/ /usr/local/ssl/
-COPY openssl.cnf /usr/local/ssl/openssl.cnf
-COPY --chown=root:root --chmod=744 entrypoint.sh /entrypoint.sh
+# node binary
+RUN cp /usr/local/bin/node /rootfs/usr/local/bin/node && \
+    strip --strip-all /rootfs/usr/local/bin/node
+
+# npm module. There is no /usr/bin/env in the final image, so the scripts have
+# to point to the node binary directly.
+RUN cp -a /usr/local/lib/node_modules/npm /rootfs/usr/local/lib/node_modules/npm && \
+    rm -Rf /rootfs/usr/local/lib/node_modules/npm/{docs,man} && \
+    sed -i '1s|^#!.*|#!/usr/local/bin/node|' /rootfs/usr/local/lib/node_modules/npm/bin/{npm,npx}-cli.js && \
+    ln -s ../lib/node_modules/npm/bin/npm-cli.js /rootfs/usr/local/bin/npm && \
+    ln -s ../lib/node_modules/npm/bin/npx-cli.js /rootfs/usr/local/bin/npx
+
+# FIPS provider and its configuration. OpenSSL itself is linked statically into
+# node, so neither libcrypto/libssl nor the openssl CLI are needed at runtime.
+# fipsmodule.cnf only contains fixed settings and the MAC of fips.so, it was
+# generated in the app stage. Do not strip fips.so, this would invalidate the MAC.
+COPY openssl.cnf /rootfs/usr/local/ssl/openssl.cnf
+RUN cp /usr/local/lib64/ossl-modules/fips.so /rootfs/usr/local/lib64/ossl-modules/fips.so && \
+    cp /usr/local/ssl/fipsmodule.cnf /rootfs/usr/local/ssl/fipsmodule.cnf
+
+# Shared libraries required by node and the FIPS provider
+RUN set -o pipefail && \
+    ldd /rootfs/usr/local/bin/node /rootfs/usr/local/lib64/ossl-modules/fips.so | \
+    awk '$2 == "=>" && $3 ~ /^\// { print $3 } $1 ~ /^\// && $1 !~ /:$/ { print $1 }' | \
+    sort -u | \
+    xargs -I{} cp -L {} /rootfs/usr/lib64/
+
+# Without these entries os.userInfo() fails
+RUN echo 'root:x:0:0:root:/root:/sbin/nologin' > /rootfs/etc/passwd && \
+    echo 'root:x:0:' > /rootfs/etc/group
 
 FROM scratch AS image
 
-COPY --from=base / /
+COPY --from=rootfs /rootfs/ /
 
 ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
 ENV OPENSSL_MODULES=/usr/local/lib64/ossl-modules
-ENV LD_LIBRARY_PATH=/usr/local/lib64
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["/bin/bash"]
+CMD ["/usr/local/bin/node"]
 
 FROM scratch AS artifacts
 COPY --from=app /usr/local/bin/node /usr/bin/node
