@@ -64,6 +64,16 @@ jobs:
           tags: |
             type=raw,value=${{ github.event.inputs.version }}-r${{ github.event.inputs.release }}-tumbleweed
 
+      - name: Extract metadata (tags, labels) for Docker builder image
+        id: meta-builder
+        uses: docker/metadata-action@v6
+        with:
+          images: |
+            ${{ vars.ARTIFACTORY_IMG_URL_PUBLIC }}/nodejs
+            ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ github.event.inputs.version }}-r${{ github.event.inputs.release }}-builder
+
       - name: Set up Docker Buildx (container driver)
         uses: docker/setup-buildx-action@v4
 
@@ -82,6 +92,22 @@ jobs:
           target: image
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Build Docker builder image (push to registry)
+        if: ${{ success() }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_SOURCE_VERSION=${{ github.event.inputs.version }}
+            OPENSSL_FIPS_VERSION=${{ github.event.inputs.openssl_fips_version }}
+            OPENSSL_VERSION=${{ github.event.inputs.openssl_version }}
+          push: true
+          target: builder
+          tags: ${{ steps.meta-builder.outputs.tags }}
+          labels: ${{ steps.meta-builder.outputs.labels }}
 
       - name: Build Docker image (local artifacts)
         if: ${{ success() }}
