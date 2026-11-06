@@ -47,6 +47,7 @@ FROM app AS rootfs
 
 RUN mkdir -p /rootfs/usr/lib64 \
              /rootfs/usr/local/bin \
+             /rootfs/usr/local/lib/node_modules \
              /rootfs/usr/local/lib64/ossl-modules \
              /rootfs/usr/local/ssl \
              /rootfs/etc \
@@ -59,6 +60,14 @@ RUN mkdir -p /rootfs/usr/lib64 \
 # node binary
 RUN cp /usr/local/bin/node /rootfs/usr/local/bin/node && \
     strip --strip-all /rootfs/usr/local/bin/node
+
+# npm module. There is no /usr/bin/env in the final image, so the scripts have
+# to point to the node binary directly.
+RUN cp -a /usr/local/lib/node_modules/npm /rootfs/usr/local/lib/node_modules/npm && \
+    rm -Rf /rootfs/usr/local/lib/node_modules/npm/{docs,man} && \
+    sed -i '1s|^#!.*|#!/usr/local/bin/node|' /rootfs/usr/local/lib/node_modules/npm/bin/{npm,npx}-cli.js && \
+    ln -s ../lib/node_modules/npm/bin/npm-cli.js /rootfs/usr/local/bin/npm && \
+    ln -s ../lib/node_modules/npm/bin/npx-cli.js /rootfs/usr/local/bin/npx
 
 # FIPS provider and its configuration. OpenSSL itself is linked statically into
 # node, so neither libcrypto/libssl nor the openssl CLI are needed at runtime.
@@ -79,38 +88,6 @@ RUN set -o pipefail && \
 RUN echo 'root:x:0:0:root:/root:/sbin/nologin' > /rootfs/etc/passwd && \
     echo 'root:x:0:' > /rootfs/etc/group
 
-# Build image (<version>-r<release>-builder): full tumbleweed with bash, git and
-# npm, meant as the first stage of multi-stage builds. node, the FIPS provider
-# and its configuration are identical to the runtime image and live at the same
-# paths, so build results can be copied into the runtime image unchanged.
-# Shared libraries come from the tumbleweed packages, not from /rootfs.
-FROM opensuse/tumbleweed:latest AS builder
-
-SHELL ["/bin/bash", "-c"]
-
-RUN zypper update --no-confirm && \
-    zypper install --no-confirm --no-recommends git-core libstdc++6 && \
-    zypper clean --all
-
-COPY --from=rootfs /rootfs/usr/local/bin/node /usr/local/bin/node
-COPY --from=rootfs /rootfs/usr/local/lib64/ossl-modules/ /usr/local/lib64/ossl-modules/
-COPY --from=rootfs /rootfs/usr/local/ssl/ /usr/local/ssl/
-
-# npm module. /usr/bin/env exists here, so the stock shebangs work as they are.
-COPY --from=app /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
-RUN rm -Rf /usr/local/lib/node_modules/npm/{docs,man} && \
-    ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
-    ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
-
-ENV OPENSSL_CONF=/usr/local/ssl/openssl.cnf
-ENV OPENSSL_MODULES=/usr/local/lib64/ossl-modules
-
-# Smoke test, fails the build on missing libraries or a broken npm
-RUN node --version && npm --version && git --version
-
-CMD ["/bin/bash"]
-
-# Runtime image (<version>-r<release>-tumbleweed): node only, no shell, no npm
 FROM scratch AS image
 
 COPY --from=rootfs /rootfs/ /
