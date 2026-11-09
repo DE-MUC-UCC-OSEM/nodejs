@@ -148,7 +148,7 @@ jobs:
         run : |
           rm -f ${{ github.workspace }}/mend
           curl https://downloads.mend.io/cli/linux_amd64/mend -o ${{ github.workspace }}/mend && chmod +x ${{ github.workspace }}/mend
-          ${{ github.workspace }}/mend image ${IMAGE} -s "OpenScape UC Test//OSEM third party applications//nodejs-osem-docker-image - $NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed"
+          ${{ github.workspace }}/mend image ${IMAGE} -s "OpenScape UC Portfolio//OSEM third party applications//nodejs-osem-docker-image - $NODEJS_VERSION-r$RELEASE_VERSION-tumbleweed"
 
       - name: Create a release
         if: ${{ success() }}
