@@ -7,7 +7,7 @@ on:
         type: string
         required: true
         description: 'Nodejs version'
-        default: '26.11.0'
+        default: '26.13.0'
       release:
         type: string
         required: true
@@ -89,6 +89,8 @@ jobs:
             OPENSSL_FIPS_VERSION=${{ github.event.inputs.openssl_fips_version }}
             OPENSSL_VERSION=${{ github.event.inputs.openssl_version }}
           push: true
+          provenance: false
+          sbom: false
           target: image
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -105,6 +107,8 @@ jobs:
             OPENSSL_FIPS_VERSION=${{ github.event.inputs.openssl_fips_version }}
             OPENSSL_VERSION=${{ github.event.inputs.openssl_version }}
           push: true
+          provenance: false
+          sbom: false
           target: builder
           tags: ${{ steps.meta-builder.outputs.tags }}
           labels: ${{ steps.meta-builder.outputs.labels }}
