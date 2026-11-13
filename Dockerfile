@@ -8,7 +8,7 @@ WORKDIR /opt
 
 ARG NODE_SOURCE_VERSION
 RUN zypper update --no-confirm && \
-    zypper install --no-confirm gawk git python314 python314-pkgconfig gcc gcc16 gcc-c++ gcc16-c++ perl make nasm perl-Text-Template unzip autoconf libtool findutils rust cargo && \
+    zypper install --no-confirm gawk git python314 python314-pkgconfig gcc gcc16 gcc-c++ gcc16-c++ perl make nasm perl-Text-Template unzip autoconf libtool findutils && \
     git -C /opt clone --depth 1 --branch v$NODE_SOURCE_VERSION https://github.com/nodejs/node.git nodejs
 
 # Build and Install OpenSSL FIPS module
@@ -36,9 +36,42 @@ ENV OPENSSL_CONF=${PREFIX}/ssl/openssl.cnf
 ENV OPENSSL_MODULES=${PREFIX}/lib64/ossl-modules
 ENV LD_LIBRARY_PATH=${PREFIX}/lib64
 WORKDIR /opt/nodejs
-RUN ./configure --shared-openssl-libpath=${PREFIX}/lib64 --shared-openssl-includes=${PREFIX}/include --shared-openssl-libname=crypto,ssl --openssl-is-fips --disable-single-executable-application --without-node-snapshot && \
+# Size-trimmed build for osem. Removed on purpose (not used by osem):
+#   small-icu en,de      other locales fall back to English
+#   --without-inspector  no --inspect, --cpu-prof, --heap-prof, NODE_V8_COVERAGE
+#   --without-amaro      no TypeScript type stripping (node app.ts)
+#   --without-sqlite     no node:sqlite, localStorage, sessionStorage
+#   --without-ffi        no node:ffi
+#   --v8-disable-temporal-support  no Temporal (and no Rust toolchain needed)
+# Keep WebAssembly (undici fetch), full time zone data, http2, c-ares and npm
+# (the builder image needs npm, the runtime image removes it below).
+RUN ./configure \
+        --shared-openssl-libpath=${PREFIX}/lib64 \
+        --shared-openssl-includes=${PREFIX}/include \
+        --shared-openssl-libname=crypto,ssl \
+        --openssl-is-fips \
+        --disable-single-executable-application \
+        --without-node-snapshot \
+        --with-intl=small-icu --with-icu-locales=en,de \
+        --without-inspector \
+        --without-amaro \
+        --without-sqlite \
+        --without-ffi \
+        --v8-disable-temporal-support \
+        --v8-enable-snapshot-compression \
+        --enable-lto && \
     make -j$(nproc) && \
-    make install
+    make install && \
+    ls -l /usr/local/bin/node && \
+    strip --strip-all /usr/local/bin/node && \
+    ls -l /usr/local/bin/node
+
+# Smoke test with the OpenSSL configuration of the final images. Fails the
+# build before anything is pushed if osem relevant features are missing or if
+# a removed feature is still compiled in.
+COPY openssl.cnf /usr/local/ssl/openssl.cnf
+COPY smoke-test.mjs /opt/smoke-test.mjs
+RUN node --openssl-legacy-provider /opt/smoke-test.mjs
 
 FROM opensuse/tumbleweed:latest AS base
 

@@ -12,6 +12,9 @@ URL:            https://mitel.com
 Provides:      nodejs-binary = __VERSION__
 Requires:      /bin/sh
 
+# zstd payload: smaller RPM file (needs rpm >= 4.14 to build and install)
+%define _binary_payload w19.zstdio
+
 %description
 Installing NodeJS binary version __VERSION__-__RELEASE__
 

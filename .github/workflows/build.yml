@@ -140,6 +140,38 @@ jobs:
           rpmbuild -bb --root "${{ github.workspace }}" --build-in-place --buildroot /files --define "_rpmdir ${{ github.workspace }}" ${{ github.workspace }}/nodejs-binary.spec
           GPG_TTY="" rpmsign --key-id=${{ secrets.GPG_KEY_ID }} --addsign ${{ github.workspace }}/x86_64/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm
 
+      - name: Size report
+        if: ${{ success() }}
+        continue-on-error: true
+        env:
+          IMAGE_REPO: ${{ vars.ARTIFACTORY_IMG_URL_PUBLIC }}/nodejs
+          TAG_PREFIX: ${{ github.event.inputs.version }}-r${{ github.event.inputs.release }}
+          RPM: ${{ github.workspace }}/x86_64/nodejs-binary-${{ github.event.inputs.version }}-${{ github.event.inputs.release }}.x86_64.rpm
+          NODE_BIN: ${{ github.workspace }}/artifacts/usr/bin/node
+        run: |
+          # Compressed size of a pushed image: sum of its layer sizes
+          image_size() {
+            local raw digest
+            raw=$(docker buildx imagetools inspect --raw "$1") || { echo "n/a"; return; }
+            if echo "$raw" | jq -e '.manifests' > /dev/null; then
+              digest=$(echo "$raw" | jq -r '[.manifests[] | select(.platform.architecture == "amd64")][0].digest')
+              raw=$(docker buildx imagetools inspect --raw "${1%:*}@${digest}") || { echo "n/a"; return; }
+            fi
+            echo "$raw" | jq '[.layers[].size] | add' | numfmt --to=iec --suffix=B
+          }
+          {
+            echo "### Sizes"
+            echo ""
+            echo "| Artifact | Size |"
+            echo "|----------|------|"
+            echo "| node binary | $(stat -c %s "$NODE_BIN" | numfmt --to=iec --suffix=B) |"
+            echo "| RPM | $(stat -c %s "$RPM" | numfmt --to=iec --suffix=B) |"
+            echo "| Image ${TAG_PREFIX}-tumbleweed (compressed) | $(image_size "${IMAGE_REPO}:${TAG_PREFIX}-tumbleweed") |"
+            echo "| Image ${TAG_PREFIX}-builder (compressed) | $(image_size "${IMAGE_REPO}:${TAG_PREFIX}-builder") |"
+            echo ""
+            echo "\`$(file -b "$NODE_BIN")\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Mend Scans
         if: ${{ success() }}
         env:
